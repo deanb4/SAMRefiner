@@ -84,6 +84,7 @@ def sam_refiner(image_path,
         image_embeddings = precomputed_image_embeddings
         interm_embeddings = precomputed_interm_embeddings
         image = image_path
+        resize_transform = resize_transform
     else:
 
         if resize_transform is None:
