@@ -42,6 +42,8 @@ def sam_refiner(image_path,
                 use_box=True,
                 use_mask=True,
                 add_neg=True,
+                precomputed_image_embeddings=None, 
+                precomputed_interm_embeddings=None,
                 iters=5,
                 margin=0.0,
                 gamma=4.0,
@@ -77,30 +79,36 @@ def sam_refiner(image_path,
         
     assert len(coarse_masks.shape) == 3, "coarse mask dim must be (n, h, w), but got {}".format(coarse_masks.shape)
 
-    if resize_transform is None:
-        resize_transform = ResizeLongestSide(sam.image_encoder.img_size)
-    
-    image = cv2.imread(image_path)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    ori_size = image.shape[:2]
-    image = [prepare_image(image, resize_transform, sam.device)]
-    
-    with torch.no_grad():
-        if ddp:
-            input_images = torch.stack([sam.module.preprocess(x) for x in image], dim=0)
-            if not use_samhq:
-                image_embeddings = sam.module.image_encoder(input_images) # torch.Size([1, 256, 64, 64])
-            else:
-                image_embeddings, interm_embeddings = sam.module.image_encoder(input_images)
-                interm_embeddings = interm_embeddings[0] # early layer
-        else:
-            input_images = torch.stack([sam.preprocess(x) for x in image], dim=0)
-            if not use_samhq:
-                image_embeddings = sam.image_encoder(input_images) # torch.Size([1, 256, 64, 64])
-            else:
-                image_embeddings, interm_embeddings = sam.image_encoder(input_images)
-                interm_embeddings = interm_embeddings[0] # early layer
+    # custom addition
+    if precomputed_image_embeddings is not None:
+        image_embeddings = precomputed_image_embeddings
+        interm_embeddings = precomputed_interm_embeddings
+    else:
+
+        if resize_transform is None:
+            resize_transform = ResizeLongestSide(sam.image_encoder.img_size)
         
+        image = cv2.imread(image_path)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        ori_size = image.shape[:2]
+        image = [prepare_image(image, resize_transform, sam.device)]
+        
+        with torch.no_grad():
+            if ddp:
+                input_images = torch.stack([sam.module.preprocess(x) for x in image], dim=0)
+                if not use_samhq:
+                    image_embeddings = sam.module.image_encoder(input_images) # torch.Size([1, 256, 64, 64])
+                else:
+                    image_embeddings, interm_embeddings = sam.module.image_encoder(input_images)
+                    interm_embeddings = interm_embeddings[0] # early layer
+            else:
+                input_images = torch.stack([sam.preprocess(x) for x in image], dim=0)
+                if not use_samhq:
+                    image_embeddings = sam.image_encoder(input_images) # torch.Size([1, 256, 64, 64])
+                else:
+                    image_embeddings, interm_embeddings = sam.image_encoder(input_images)
+                    interm_embeddings = interm_embeddings[0] # early layer
+            
     for i in range(iters):
         if i == 0:
             pred_mask_list = coarse_masks
